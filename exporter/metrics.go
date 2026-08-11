@@ -34,6 +34,11 @@ var (
 		Buckets: prometheus.ExponentialBuckets(0.001, 2, 20),
 	}, []string{"cluster", "namespace", "user"})
 
+	yunikornWorkloadPodsScheduled = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "yunikorn_workload_pods_scheduled_total",
+		Help: "Total number of YuniKorn workload pods created by kube-controller-manager and successfully bound",
+	}, []string{"cluster", "namespace"})
+
 	batchJobCompleteLatency = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "batchjob_completion_latency_seconds",
 		Help:    "Time from job creation to complete condition in seconds",
@@ -48,7 +53,90 @@ func init() {
 		podDeletedTotal,
 		batchJobCompleteLatency,
 		podCompletedTotal,
+		yunikornWorkloadPodsScheduled,
 	)
+}
+
+type yunikornWorkloadPodState uint8
+
+const (
+	yunikornPodCreated yunikornWorkloadPodState = iota + 1
+	yunikornPodBindingObserved
+	yunikornPodScheduled
+	yunikornPodExcluded
+)
+
+const (
+	yunikornClusterLabel       = "yunikorn"
+	kubeControllerManagerAgent = "kube-controller-manager"
+)
+
+func (p *Exporter) updateYuniKornWorkloadPodsScheduled(clusterLabel string, event auditv1.Event) {
+	if clusterLabel != yunikornClusterLabel ||
+		event.Stage != auditv1.StageResponseComplete ||
+		event.ObjectRef == nil ||
+		event.ObjectRef.Resource != "pods" {
+		return
+	}
+
+	podTarget := buildTarget(event.ObjectRef)
+	if podTarget == (target{}) {
+		return
+	}
+
+	if event.ObjectRef.Subresource == "binding" && event.Verb == "create" {
+		switch p.yunikornWorkloadPodState[podTarget] {
+		case yunikornPodCreated:
+			yunikornWorkloadPodsScheduled.WithLabelValues(clusterLabel, podTarget.Namespace).Inc()
+			p.yunikornWorkloadPodState[podTarget] = yunikornPodScheduled
+		case yunikornPodScheduled, yunikornPodExcluded, yunikornPodBindingObserved:
+			return
+		default:
+			p.yunikornWorkloadPodState[podTarget] = yunikornPodBindingObserved
+		}
+		return
+	}
+
+	if event.ObjectRef.Subresource != "" {
+		return
+	}
+
+	switch event.Verb {
+	case "create":
+		if event.ResponseObject == nil {
+			return
+		}
+
+		var pod Pod
+		if err := json.Unmarshal(event.ResponseObject.Raw, &pod); err != nil {
+			slog.Error("failed to unmarshal YuniKorn pod", "err", err)
+			return
+		}
+
+		podTarget = target{
+			Name:      pod.Metadata.Name,
+			Namespace: pod.Metadata.Namespace,
+		}
+		if podTarget == (target{}) {
+			return
+		}
+
+		if extractUserAgent(event.UserAgent) != kubeControllerManagerAgent {
+			p.yunikornWorkloadPodState[podTarget] = yunikornPodExcluded
+			return
+		}
+
+		if p.yunikornWorkloadPodState[podTarget] == yunikornPodBindingObserved {
+			yunikornWorkloadPodsScheduled.WithLabelValues(clusterLabel, podTarget.Namespace).Inc()
+			p.yunikornWorkloadPodState[podTarget] = yunikornPodScheduled
+			return
+		}
+		if p.yunikornWorkloadPodState[podTarget] != yunikornPodScheduled {
+			p.yunikornWorkloadPodState[podTarget] = yunikornPodCreated
+		}
+	case "delete":
+		delete(p.yunikornWorkloadPodState, podTarget)
+	}
 }
 
 // updateMetrics processes audit event and updates metrics
@@ -74,6 +162,8 @@ func (p *Exporter) updateMetrics(clusterLabel string, event auditv1.Event) {
 		}
 		apiRequests.WithLabelValues(labels...).Inc()
 	}
+
+	p.updateYuniKornWorkloadPodsScheduled(clusterLabel, event)
 
 	if event.ObjectRef != nil {
 		switch event.ObjectRef.Resource {

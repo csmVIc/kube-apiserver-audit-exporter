@@ -37,8 +37,9 @@ func WithClusterLabel(c string) Option {
 
 func NewExporter(opts ...Option) *Exporter {
 	e := &Exporter{
-		podCreationTimes:      map[target]*time.Time{},
-		batchJobCreationTimes: map[target]*time.Time{},
+		podCreationTimes:         map[target]*time.Time{},
+		batchJobCreationTimes:    map[target]*time.Time{},
+		yunikornWorkloadPodState: map[target]yunikornWorkloadPodState{},
 	}
 
 	for _, opt := range opts {
@@ -58,6 +59,8 @@ type Exporter struct {
 
 	podCreationTimes      map[target]*time.Time
 	batchJobCreationTimes map[target]*time.Time
+
+	yunikornWorkloadPodState map[target]yunikornWorkloadPodState
 }
 
 func ListenAndServe(addr string) error {
