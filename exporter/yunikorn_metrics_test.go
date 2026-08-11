@@ -25,7 +25,9 @@ func successfulEvent(name, namespace, userAgent, verb, subresource string) audit
 
 func podCreateEvent(t *testing.T, name, namespace, userAgent string) auditv1.Event {
 	t.Helper()
-	event := successfulEvent(name, namespace, userAgent, "create", "")
+	// Kubernetes pod create audit events can leave objectRef.name empty; the
+	// generated pod name is authoritative in responseObject.metadata.name.
+	event := successfulEvent("", namespace, userAgent, "create", "")
 	raw, err := json.Marshal(Pod{Metadata: Metadata{Name: name, Namespace: namespace}})
 	if err != nil {
 		t.Fatal(err)

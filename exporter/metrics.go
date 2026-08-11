@@ -79,12 +79,11 @@ func (p *Exporter) updateYuniKornWorkloadPodsScheduled(clusterLabel string, even
 		return
 	}
 
-	podTarget := buildTarget(event.ObjectRef)
-	if podTarget == (target{}) {
-		return
-	}
-
 	if event.ObjectRef.Subresource == "binding" && event.Verb == "create" {
+		podTarget := buildTarget(event.ObjectRef)
+		if podTarget == (target{}) {
+			return
+		}
 		switch p.yunikornWorkloadPodState[podTarget] {
 		case yunikornPodCreated:
 			yunikornWorkloadPodsScheduled.WithLabelValues(clusterLabel, podTarget.Namespace).Inc()
@@ -113,7 +112,7 @@ func (p *Exporter) updateYuniKornWorkloadPodsScheduled(clusterLabel string, even
 			return
 		}
 
-		podTarget = target{
+		podTarget := target{
 			Name:      pod.Metadata.Name,
 			Namespace: pod.Metadata.Namespace,
 		}
@@ -135,7 +134,10 @@ func (p *Exporter) updateYuniKornWorkloadPodsScheduled(clusterLabel string, even
 			p.yunikornWorkloadPodState[podTarget] = yunikornPodCreated
 		}
 	case "delete":
-		delete(p.yunikornWorkloadPodState, podTarget)
+		podTarget := buildTarget(event.ObjectRef)
+		if podTarget != (target{}) {
+			delete(p.yunikornWorkloadPodState, podTarget)
+		}
 	}
 }
 
