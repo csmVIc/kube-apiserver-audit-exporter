@@ -76,12 +76,12 @@ func ListenAndServe(addr string) error {
 
 // Run handles audit log file changes
 func (p *Exporter) Run() {
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		p.handleFileEvent(p.file)
-		ticker.Reset(time.Second)
+		ticker.Reset(100 * time.Millisecond)
 	}
 }
 
@@ -103,7 +103,7 @@ func (p *Exporter) processFileUpdate(path string) error {
 		slog.Info("Log file truncated, resetting offset", "cluster", p.clusterLabel)
 		p.offset = 0
 	} else if size == p.offset {
-		slog.Info("No new updates in log file", "cluster", p.clusterLabel, "offset", p.offset)
+		slog.Debug("No new updates in log file", "cluster", p.clusterLabel, "offset", p.offset)
 		return nil
 	}
 
@@ -119,7 +119,7 @@ func (p *Exporter) processFileUpdate(path string) error {
 
 	start := time.Now()
 	defer func() {
-		slog.Info("File processing complete", "cluster", p.clusterLabel, "new_offset", p.offset, "duration", time.Since(start))
+		slog.Debug("File processing complete", "cluster", p.clusterLabel, "new_offset", p.offset, "duration", time.Since(start))
 	}()
 
 	reader := bufio.NewReaderSize(file, 1<<20) // 1MB buffer
