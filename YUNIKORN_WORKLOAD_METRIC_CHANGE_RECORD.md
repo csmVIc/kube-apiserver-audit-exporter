@@ -110,3 +110,9 @@ Exporter 启动时打开一次主路径 `audit.log` 并持续持有文件句柄�
 ```text
 ghcr.io/csmvic/kube-apiserver-audit-exporter:v0.0.29
 ```
+
+镜像索引摘要：
+
+```text
+sha256:00f3e0cc955239969ccffbeac8a81a8e81563fd89052f85a8d8320ff590a1b34
+```
