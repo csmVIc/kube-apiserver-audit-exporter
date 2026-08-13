@@ -15,6 +15,7 @@ var (
 	address      = ":8080"
 	cluster      = ""
 	replay       = false
+	startAtEnd   = false
 	delay        time.Duration
 )
 
@@ -23,6 +24,7 @@ func init() {
 	pflag.StringVar(&address, "address", address, "Address to listen on")
 	pflag.StringVar(&cluster, "cluster-label", cluster, "Default cluster label of metrics")
 	pflag.BoolVar(&replay, "replay", replay, "replay the audit log")
+	pflag.BoolVar(&startAtEnd, "start-at-end", startAtEnd, "start reading at the current end of the audit log")
 	pflag.DurationVar(&delay, "delay", 0, "delay to start")
 	pflag.Parse()
 }
@@ -48,6 +50,7 @@ func monitorAndStartExporters() {
 	for i, path := range paths {
 		e := exporter.NewExporter(
 			exporter.WithReplay(replay),
+			exporter.WithStartAtEnd(startAtEnd),
 			exporter.WithFile(path),
 			exporter.WithClusterLabel(labels[i]),
 		)
